@@ -1,20 +1,20 @@
 ## Problem Statement and Inspiration
 ### From [CSE662 2018 page](https://odin.cse.buffalo.edu/teaching/cse-662/2018fa/index.html):
-The aim of this seed is to design a lightweight wrapper around Python that: (1) Allows python code to be executed without risk to the underlying platform, (2) Allows computation inputs to be delivered to the executing python through some narrow interface, and (3) Allows computation results to be exported through some narrow interface. 
+The aim of this seed is to design a lightweight wrapper around Python that: (1) Allows python code to be executed without risk to the underlying platform, (2) Allows computation inputs to be delivered to the executing python through some narrow interface, and (3) Allows computation results to be exported through some narrow interface.
 
 ### From [Issue](https://github.com/VizierDB/web-api/issues/2) filed on VizierDB's Github:
 If we're going to rely on Python as heavily as we do, it needs to be executed in a sandboxed context.
 
 ### From Oliver's [Project Seed Slides](https://odin.cse.buffalo.edu/slides/cse662fa2018/2018-08-29-Seeds.html#/5):
-![Alt description](https://odin.cse.buffalo.edu/slides/cse662fa2018/graphics/2018-08-29-Sandbox-Real.svg). 
+![Alt description](https://odin.cse.buffalo.edu/slides/cse662fa2018/graphics/2018-08-29-Sandbox-Real.svg).
 
-You get - 
+You get -
 * Python Code
 * Inputs to the code (or a socket)
 
 Your system produces
 * Output for the code...
-* without calling out of the sandbox. 
+* without calling out of the sandbox.
 
 #### Things to Think About
 What security guarantees are you providing?
@@ -39,3 +39,7 @@ https://stackoverflow.com/questions/3068139/how-can-i-sandbox-python-in-pure-pyt
 * PyPy's built in sandboxing: http://doc.pypy.org/en/latest/sandbox.html Using PyPy would be another open n shut solution but most users would want to stick to CPython (major audience is data scientists, most libs are built with CPython in mind)
 * SecComp linux kernel level sandbox that limits syscalls: https://code.google.com/archive/p/seccompsandbox/wikis/overview.wiki
 * Unexpected Py in the wild - PyCage https://pypi.org/project/PYCage/
+
+## Malicious Behaviour List
+(Use this to dump ideas/examples of unwanted behaviour)
+* Exec() or Fork() new processes
