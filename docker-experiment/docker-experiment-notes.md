@@ -1,3 +1,17 @@
+## Exp 0
+Try run https://github.com/christophetd/docker-python-sandbox as is.
+
+Output:
+```
+{ timedOut: true,
+  isError: true,
+  stderr: '',
+  stdout: '',
+  combined: ''
+}
+```
+TODO: Run on a linux box; because "It has also been reported that the library doesn't work properly on Mac for an unknown reason."
+
 ## Exp 1
 Spin a single docker container programmatically from Python, run a trivial python code in container and shut it down. Note time taken for each stage.
 
