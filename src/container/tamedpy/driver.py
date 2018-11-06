@@ -26,7 +26,9 @@ def run_one(execid):
         output = runcode(code)
         print("Executed code, output is: ")
         print(output)
+        shutdown_server()
         return output
+    shutdown_server()
     return 'Expected POST request with data {"code": ""}'
 
 def runcode(code):
@@ -46,18 +48,13 @@ def runcode(code):
         output += str(completedProc.stdout)
     return output
 
+def shutdown_server():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+
 if __name__ == '__main__':
     print(os.listdir("/tmp/py"))
-
-
-#     print(runcode("print(2**12)"))
-#     code = '''import math
-# print(math.sqrt(2500))
-#     '''
-#     print(runcode(code))
-#     code = '''import os
-# print(os.environ['PATH'])
-#     '''
-#     print(runcode(code))
 
     app.run(host="0.0.0.0", port=3000)

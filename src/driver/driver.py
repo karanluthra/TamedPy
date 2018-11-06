@@ -89,6 +89,7 @@ class Worker(object):
             container = client.containers.run(
                 "tamedpy", volumes=volume_params, ports=port_params, detach=True
             )
+            print(container)
             # FIXME: instead of sleeping, implement container sending a notif that it is ready
             time.sleep(1)
             self._status = 1
