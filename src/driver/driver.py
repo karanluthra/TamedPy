@@ -89,7 +89,8 @@ class Worker(object):
             container = client.containers.run(
                 "tamedpy", volumes=volume_params, ports=port_params, detach=True
             )
-            time.sleep(2)
+            # FIXME: instead of sleeping, implement container sending a notif that it is ready
+            time.sleep(1)
             self._status = 1
         except docker.errors.APIError as e:
             # FIXME: ask for specific error codes / eg when port is already allocated, take specific remedial action
@@ -100,6 +101,7 @@ class Worker(object):
         return self.execd_path
 
     def execute(self, code):
+        # FIXME: container attached to this worker must stop, cleaned up and replaced
         response = exec_http_req(self.port, self.id, code)
         assert response.ok
 
