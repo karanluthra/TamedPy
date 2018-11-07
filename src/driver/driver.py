@@ -23,6 +23,12 @@ class Driver(object):
     def __init__(self):
         self.num_workers = 1
         self.worker_queue = []
+        self.turndown_in_progress = False
+
+    def __del__(self):
+        print("driver exiting..")
+        if self.worker_queue:
+            self.turndown()
 
     def execute(self, source_code):
         # find a ready worker, and execute the source code
@@ -41,6 +47,12 @@ class Driver(object):
         for i in range(self.num_workers):
             self.turnup_one_new_worker()
 
+    def turndown(self):
+        print("driver turndown initiated")
+        self.turndown_in_progress = True
+        for worker in self.worker_queue:
+            worker.turndown()
+
     def grab_ready_worker(self):
         ready_worker = None
         for i in range(len(self.worker_queue)):
@@ -54,7 +66,8 @@ class Driver(object):
     def on_worker_exiting(self, worker):
         assert(worker.status() == 2)
         self.worker_queue.remove(worker)
-        self.turnup_one_new_worker()
+        if not self.turndown_in_progress:
+            self.turnup_one_new_worker()
 
 
 class ContainerThread(threading.Thread):
@@ -83,6 +96,7 @@ class Worker(object):
         self.execd_path = None
         self._status = 0
         self.port = None
+        self.container = None
 
     def status(self):
         return self._status
@@ -112,14 +126,14 @@ class Worker(object):
         self.port = port
         port_params = {"3000": port}
         try:
-            container = client.containers.run(
+            self.container = client.containers.run(
                 "tamedpy", volumes=volume_params, ports=port_params, detach=True
             )
-            print(container)
+            print(self.container)
             # FIXME: instead of sleeping, implement container sending a notif that it is ready
             time.sleep(1)
             self._status = 1
-            ContainerThread(self, container.id).start()
+            ContainerThread(self, self.container.id).start()
 
         except docker.errors.APIError as e:
             # FIXME: ask for specific error codes / eg when port is already allocated, take specific remedial action
@@ -127,6 +141,9 @@ class Worker(object):
             exit(-1)
         # start a thread context that waits to hear from the spawned container when it stops
 
+    def turndown(self):
+        print("worker {} turndown intiated".format(self.id))
+        self.container.stop()
 
     def get_exec_dir_path(self):
         return self.execd_path
@@ -162,3 +179,4 @@ if __name__ == "__main__":
     print(driver.worker_queue)
 
     driver.execute("print(2**4)")
+    driver.turndown()
