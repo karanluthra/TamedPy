@@ -149,7 +149,6 @@ class Worker(object):
         return self.execd_path
 
     def execute(self, code):
-        # FIXME: container attached to this worker must stop, cleaned up and replaced
         response = exec_http_req(self.port, self.id, code)
         assert response.ok
 
