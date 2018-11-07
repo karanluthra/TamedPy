@@ -4,6 +4,10 @@ import errno
 import subprocess
 import requests
 import time
+import threading
+import docker
+
+client = docker.from_env()
 
 WORKSPACE_DIR = "/tmp/tamedpy"
 try:
@@ -25,15 +29,17 @@ class Driver(object):
         worker = self.grab_ready_worker()
         worker.execute(source_code)
 
+    def turnup_one_new_worker(self):
+        new_worker = Worker(self)
+        # synch step, long, IO bound
+        new_worker.turnup()
+        assert new_worker.status() == 1
+        self.worker_queue.append(new_worker)
+
     def turnup(self):
         # initiate workers to fill up the worker queue
         for i in range(self.num_workers):
-            new_worker = Worker()
-
-            # synch step, long, IO bound
-            new_worker.turnup()
-            assert new_worker.status() == 1
-            self.worker_queue.append(new_worker)
+            self.turnup_one_new_worker()
 
     def grab_ready_worker(self):
         ready_worker = None
@@ -45,12 +51,34 @@ class Driver(object):
             assert False, "out of workers"
         return ready_worker
 
+    def on_worker_exiting(self, worker):
+        assert(worker.status() == 2)
+        self.worker_queue.remove(worker)
+        self.turnup_one_new_worker()
+
+
+class ContainerThread(threading.Thread):
+    def __init__(self, parent_worker, container_id):
+      threading.Thread.__init__(self)
+      self.container_id = container_id
+      self.parent_worker = parent_worker
+
+    def run(self):
+      print "Starting " + self.name
+      container = client.containers.get(self.container_id)
+      print "Waiting on: " + container.short_id
+      container.wait()
+      print "Container stopped: " + container.short_id
+      print "Cleaning up started: " + container.short_id
+      container.remove()
+      self.parent_worker.on_container_finished()
+      print "Exiting " + self.name
 
 # one Worker instance per containerized execution
 # owns details about execution artifacts and status
 class Worker(object):
-    def __init__(self):
-        # super.__init__()
+    def __init__(self, parent_driver):
+        self.parent_driver = parent_driver
         self.id = uuid4()
         self.execd_path = None
         self._status = 0
@@ -61,10 +89,8 @@ class Worker(object):
 
     def turnup(self):
         # launch worker, check "ready", change status
+        print("new worker {} coming up".format(self.id))
 
-        import docker
-
-        client = docker.from_env()
         # print(client.containers.run("tamedpy"))
         # docker run -v /Users/luthrak/Projects/611/TamedPy/src/exec1:/tmp/py tamedpy
         host_path = "/Users/luthrak/Projects/611/TamedPy/src/exec1"
@@ -93,10 +119,14 @@ class Worker(object):
             # FIXME: instead of sleeping, implement container sending a notif that it is ready
             time.sleep(1)
             self._status = 1
+            ContainerThread(self, container.id).start()
+
         except docker.errors.APIError as e:
             # FIXME: ask for specific error codes / eg when port is already allocated, take specific remedial action
             print(e)
             exit(-1)
+        # start a thread context that waits to hear from the spawned container when it stops
+
 
     def get_exec_dir_path(self):
         return self.execd_path
@@ -105,6 +135,14 @@ class Worker(object):
         # FIXME: container attached to this worker must stop, cleaned up and replaced
         response = exec_http_req(self.port, self.id, code)
         assert response.ok
+
+    def on_container_finished(self):
+        print("worker {} cleaning up".format(self.id))
+        # do cleanup stuff
+        self._status = 2
+        print("worker {} exiting".format(self.id))
+        self.parent_driver.on_worker_exiting(self)
+        print("worker {} exited".format(self.id))
 
 
 def exec_http_req(port, execid, code):
@@ -117,7 +155,7 @@ def exec_http_req(port, execid, code):
 
 
 if __name__ == "__main__":
-    subprocess.call("docker kill $(docker ps -q)", shell=True)
+    # subprocess.call("docker kill $(docker ps -q)", shell=True)
 
     driver = Driver()
     driver.turnup()
