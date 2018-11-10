@@ -21,6 +21,10 @@ def run():
 @app.route("/run/<execid>", methods=['POST'])
 def run_one(execid):
     print(execid)
+    # print(os.listdir("."))
+    # print(os.listdir("/tmp/py"))
+    os.chdir("/tmp/py")
+
     if request.method == 'POST':
         code = request.get_json().get('code')
         output = runcode(code)

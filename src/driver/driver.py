@@ -6,6 +6,7 @@ import requests
 import time
 import threading
 import docker
+import shutil
 
 client = docker.from_env()
 
@@ -30,10 +31,12 @@ class Driver(object):
         if self.worker_queue:
             self.turndown()
 
-    def execute(self, source_code):
+    def execute(self, source_code, input_file_paths=[]):
         # find a ready worker, and execute the source code
         worker = self.grab_ready_worker()
-        worker.execute(source_code)
+        for input_file_path in input_file_paths:
+            worker.put(input_file_path)
+        return worker.execute(source_code)
 
     def turnup_one_new_worker(self):
         new_worker = Worker(self)
@@ -83,7 +86,8 @@ class ContainerThread(threading.Thread):
       container.wait()
       print "Container stopped: " + container.short_id
       print "Cleaning up started: " + container.short_id
-      container.remove()
+      # DEBUG: commenting out remove for debugging postmortems
+      # container.remove()
       self.parent_worker.on_container_finished()
       print "Exiting " + self.name
 
@@ -148,9 +152,23 @@ class Worker(object):
     def get_exec_dir_path(self):
         return self.execd_path
 
+    def put(self, source):
+        assert(os.path.isfile(source))
+        filename = os.path.basename(source)
+        ofpath = os.path.join(self.execd_path, filename)
+        try:
+            with open(source, "rb") as f:
+                with open(ofpath, "wb") as of:
+                    shutil.copyfileobj(f, of)
+        except Exception as e:
+            print(e)
+        print(ofpath)
+        return ofpath
+
     def execute(self, code):
         response = exec_http_req(self.port, self.id, code)
         assert response.ok
+        return response.text
 
     def on_container_finished(self):
         print("worker {} cleaning up".format(self.id))
@@ -177,5 +195,13 @@ if __name__ == "__main__":
     driver.turnup()
     print(driver.worker_queue)
 
-    driver.execute("print(2**4)")
+    code = '''print(2**4)
+with open("input.txt", "r") as f:
+    with open("uppercase.txt", "w") as of:
+        of.write(f.read().upper())
+    '''
+    ifp = '/tmp/input.txt'
+    result = driver.execute(code, [ifp, ])
+    print("Output: " + str(result))
+
     driver.turndown()
