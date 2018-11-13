@@ -111,8 +111,8 @@ class Worker(object):
 
         # print(client.containers.run("tamedpy"))
         # docker run -v /Users/luthrak/Projects/611/TamedPy/src/exec1:/tmp/py tamedpy
-        host_path = "/Users/luthrak/Projects/611/TamedPy/src/exec1"
-        self.execd_path = host_path
+        # host_path = "/Users/luthrak/Projects/611/TamedPy/src/exec1"
+        # self.execd_path = host_path
 
         # TODO: [DONE] Create new folder with exec id and mount *that* to this container.
         execd_path = os.path.join(WORKSPACE_DIR, str(self.id))
@@ -131,7 +131,7 @@ class Worker(object):
         port_params = {"3000": port}
         try:
             self.container = client.containers.run(
-                "tamedpy", volumes=volume_params, ports=port_params, detach=True
+                "tamedpy", volumes=volume_params, ports=port_params, detach=True, #security_opt=['seccomp=unconfined', 'apparmor=unconfined']
             )
             print(self.container)
             # FIXME: instead of sleeping, implement container sending a notif that it is ready
@@ -181,6 +181,7 @@ class Worker(object):
 
 
 class Result(object):
+    # TODO: add support for result.abort() to give up on the container and shutdown
     def __init__(self, path, exec_id, stdout):
         self.path = path
         self.exec_id = exec_id
@@ -210,24 +211,55 @@ def exec_http_req(port, execid, code):
     return response
 
 
+def test_basic_arith(driver):
+    code = 'print(2**4)'
+    result = driver.execute(code)
+    print(result)
+
+def test_single_file_io(driver):
+    code = '''with open("input.txt", "r") as f:
+    with open("uppercase.txt", "w") as of:
+        of.write(f.read().upper())
+    '''
+    ifpath = '/tmp/input.txt'
+    with open(ifpath, "w") as ifp:
+        ifp.write("hello world\n")
+    # think about execute returning from main thread or child thread
+    result = driver.execute(code, [ifpath, ])
+    # think about result.join() but execute() not being blocking necessarily
+    print(result)
+    print(result.readFile("uppercase.txt"))
+
+def test_seccomp_blocking_mount(driver):
+    code = '''import subprocess, os
+try:
+    os.makedirs("/media/cdrom")
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+subprocess.call("whoami", shell=True)
+subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
+    result = driver.execute(code)
+    print(result)
+
+
 if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
 
     driver = Driver()
     driver.turnup()
     print(driver.worker_queue)
-
-    code = '''print(2**4)
-with open("input.txt", "r") as f:
-    with open("uppercase.txt", "w") as of:
-        of.write(f.read().upper())
-    '''
-    ifp = '/tmp/input.txt'
-    result = driver.execute(code, [ifp, ])
-    print(result)
-    print type(result)
-    print("Output: " + str(result))
-
-    print(result.readFile("uppercase.txt"))
-
+    test_basic_arith(driver)
     driver.turndown()
+
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_single_file_io(driver)
+    driver.turndown()
+
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_seccomp_blocking_mount(driver)
+    # driver.turndown()
