@@ -129,9 +129,14 @@ class Worker(object):
         port = 3000
         self.port = port
         port_params = {"3000": port}
+
+        seccomp_policy = ""
+        with open("policy.json") as f:
+            seccomp_policy = f.read()
+
         try:
             self.container = client.containers.run(
-                "tamedpy", volumes=volume_params, ports=port_params, detach=True, #security_opt=['seccomp=unconfined', 'apparmor=unconfined']
+                "tamedpy", volumes=volume_params, ports=port_params, detach=True, security_opt=['seccomp="policy.json"']
             )
             print(self.container)
             # FIXME: instead of sleeping, implement container sending a notif that it is ready
@@ -201,6 +206,9 @@ class Result(object):
             filecontent = f.read()
         return filecontent
 
+    def listdir(self):
+        return os.listdir(self.path)
+
 
 def exec_http_req(port, execid, code):
     url = "http://127.0.0.1:{}/run/{}".format(port, execid)
@@ -230,6 +238,14 @@ def test_single_file_io(driver):
     print(result)
     print(result.readFile("uppercase.txt"))
 
+def test_seccomp_blocking_mkdir(driver):
+    code = '''import os
+os.makedirs('karan')'''
+
+    result = driver.execute(code)
+    print(result)
+    print result.listdir()
+
 def test_seccomp_blocking_mount(driver):
     code = '''import subprocess, os
 try:
@@ -245,21 +261,27 @@ subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
 
 if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
-
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_basic_arith(driver)
-    driver.turndown()
-
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_single_file_io(driver)
-    driver.turndown()
+    #
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_basic_arith(driver)
+    # driver.turndown()
+    #
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_single_file_io(driver)
+    # driver.turndown()
 
     # driver = Driver()
     # driver.turnup()
     # print(driver.worker_queue)
     # test_seccomp_blocking_mount(driver)
     # driver.turndown()
+
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_seccomp_blocking_mkdir(driver)
+    driver.turndown()
