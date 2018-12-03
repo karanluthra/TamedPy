@@ -36,7 +36,8 @@ if __name__ == '__main__':
     server_address = 'ctrl_pane.sock'
     print('connecting to %s' % server_address)
 
-    subprocess.call("ls -lt", shell=True)
+    print(subprocess.call("ls -lt", shell=True))
+    exit()
     # repeatedly attempts to connect to socket until succeeded
     while(True):
         try:

@@ -170,7 +170,7 @@ class Worker(object):
         print >>sys.stderr, 'starting up on %s' % server_address
         self.sock.bind(server_address)
 
-        os.chmod(server_address, 0o777)
+        # os.chmod(server_address, 0o777)
 
         # Listen for incoming connections
         self.sock.listen(1)
