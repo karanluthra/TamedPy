@@ -125,9 +125,7 @@ class Worker(object):
         # volume params
         mnt_pnt = "/tmp/py"
         volume_params = {execd_path: {"bind": mnt_pnt, "mode": "rw"}}
-
-        # kick off socket server
-        self.init_socket()
+        port_params = {'6110/tcp': ('127.0.0.1', 6110)}
 
         seccomp_policy = ""
         with open("policy.json") as f:
@@ -137,7 +135,7 @@ class Worker(object):
             self.container = client.containers.run(
                 "tamedpy",
                 volumes=volume_params,
-                # ports=port_params,
+                ports=port_params,
                 detach=True,
                 # security_opt=['seccomp="policy.json"']
             )
@@ -150,70 +148,79 @@ class Worker(object):
         # start socket connection
         self.hello_socket()
         assert(self._status == 1)
-
         return
 
-
-    def init_socket(self):
-        server_address = os.path.join(self.execd_path, 'ctrl_pane.sock')
-        # Make sure the socket does not already exist
-        try:
-            os.unlink(server_address)
-        except OSError:
-            if os.path.exists(server_address):
-                raise
-
-        # Create a UDS socket
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-
-        # Bind the socket to the port
-        print >>sys.stderr, 'starting up on %s' % server_address
-        self.sock.bind(server_address)
-
-        # os.chmod(server_address, 0o777)
-
-        # Listen for incoming connections
-        self.sock.listen(1)
-        return
 
     def hello_socket(self):
-        print >>sys.stderr, 'waiting for a connection'
-        self.connection, client_address = self.sock.accept()
-        try:
-            print >>sys.stderr, 'connection from', client_address
+        server_address = 'localhost'
+        port = 6110
+        while(True):
+            try:
+                sock = socket.create_connection((server_address, port))
+                message = "HELLO"
+                print('sending "%s"' % message)
+                sock.sendall(message)
 
-            data = self.connection.recv(5)
-            print >>sys.stderr, 'received "%s"' % data
+                data = sock.recv(5)
+                print('received "%s"' % data)
 
-            if data and data == "READY":
-                print "sandbox is ready, making worker status READY"
-                self._status = 1
+                if data.strip() == b'':
+                    time.sleep(0.1)
+                    continue
+                if data and data.strip() == b'READY':
+                    print("sandbox is READY")
+                else:
+                    raise Exception("bad message")
+            except Exception as e:
+                print(e)
+                time.sleep(1)
             else:
-                raise Exception("bad message")
-        except Exception as e:
-            print(e)
-            self.connection.close()
+                print("connected! and ready")
+                self._status = 1
+                break
+            finally:
+                print('closing socket')
+                sock.close()
+        return
 
     def exec_code_socket(self):
-        try:
-            then = datetime.datetime.now()
-            self.connection.sendall("START")
-            print "Sent START"
-            data = self.connection.recv(4)
-            print "Got Exec result from sandbox after ", str(datetime.datetime.now() - then)
+        server_address = 'localhost'
+        port = 6110
+        while(True):
+            try:
+                sock = socket.create_connection((server_address, port))
+                then = datetime.datetime.now()
+                message = b'START'
+                print('sending "%s"' % message)
+                sock.sendall(message)
 
-            if data and data == "DONE":
-                print "sandbox execution success"
+                data = sock.recv(4)
+                print('received "%s"' % data)
+
+                if data.strip() == b'':
+                    print("ERROR: shouldn't be getting blank from server now")
+                    time.sleep(0.1)
+                    continue
+                if data and data.strip() == b'DONE':
+                    print "Got Exec result from sandbox after ", str(datetime.datetime.now() - then)
+                    print "sandbox execution success"
+                else:
+                    raise Exception("bad message")
+            except Exception as e:
+                print(e)
+                time.sleep(1)
             else:
-                raise Exception("bad message")
-        finally:
-            # Clean up the connection
-            print("closing the connection, trigger sandbox cleanup")
-            self.connection.close()
+                print("connected! and ready")
+                self._status = 2
+                break
+            finally:
+                print("closing the connection, trigger sandbox cleanup")
+                sock.close()
 
-            # TODO: offload to some background thread
-            self.container.stop()
-            self.on_container_finished()
+        # TODO: offload to some background thread
+        self.container.stop()
+        self.on_container_finished()
+        return
 
     def turndown(self):
         print("worker {} turndown intiated".format(self.id))
@@ -268,7 +275,6 @@ class Result(object):
         stdout_path = os.path.join(self.path, "stdout.txt")
         with open(stdout_path, "r") as f:
             self._stdout = f.read()
-        assert type(self._stdout) == 'str'
         return self._stdout
 
     def readFile(self, filename):
@@ -341,11 +347,11 @@ if __name__ == "__main__":
     test_basic_arith(driver)
     driver.turndown()
     #
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_single_file_io(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_single_file_io(driver)
+    driver.turndown()
 
     # driver = Driver()
     # driver.turnup()

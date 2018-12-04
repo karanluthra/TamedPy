@@ -23,53 +23,48 @@ def runcode():
 
 if __name__ == '__main__':
     print(os.listdir("/tmp/py"))
-
-    # app.run(host="0.0.0.0", port=3000)
-
-    # UNIX socket based client
     os.chdir("/tmp/py")
 
-    # Create a UDS socket
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 
-    # Connect the socket to the port where the server is listening
-    server_address = 'ctrl_pane.sock'
-    print('connecting to %s' % server_address)
+    server_address = "0.0.0.0"
+    port = 6110
+    # Create a socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    print(subprocess.call("ls -lt", shell=True))
-    exit()
-    # repeatedly attempts to connect to socket until succeeded
+    # Bind the socket to the port
+    print('starting up on %s' % server_address)
+    sock.bind((server_address, port))
+
+    # Listen for incoming connections
+    sock.listen(5)
     while(True):
+        print('waiting for a connection')
+        connection, client_address = sock.accept()
         try:
-            sock.connect(server_address)
+            print('connection from' + str(client_address))
+
+            data = connection.recv(5)
+            print('received "%s"' % data)
+
+            # respond to HELLO
+            if data and data.strip() == b'HELLO':
+                print("host says hello")
+                message = b'READY'
+                print('sending "%s"' % message)
+                connection.sendall(message)
+            # respond to START
+            elif data and data.strip() == b'START':
+                print("host says start")
+                ##### DO CODE EXEC HERE ######
+                runcode()
+                message = b'DONE'
+                print('sending "%s"' % message)
+                connection.sendall(message)
+            else:
+                raise Exception("bad message")
         except Exception as e:
             print(e)
-            time.sleep(1)
-        else:
-            print("connected!")
-            break
-
-
-    try:
-        # Send data
-        message = "READY"
-        print('sending "%s"' % message)
-        sock.sendall(message)
-
-        data = sock.recv(5)
-        print('received "%s"' % data)
-
-        if data and data == "START":
-            print("sandbox got exec request, starting..")
-            runcode()
-        else:
-            raise Exception("bad message")
-
-        # Send data
-        message = "DONE"
-        print('sending "%s"' % message)
-        sock.sendall(message)
-
-    finally:
-        print('closing socket')
-        sock.close()
+            exit(1)
+        finally:
+            connection.close()
+    print("normal exit")
