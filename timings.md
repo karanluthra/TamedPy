@@ -282,3 +282,50 @@ ncalls  tottime  percall  cumtime  percall filename:lineno(function)
 3    0.000    0.000    5.526    1.842 driver.py:186(exec_code_socket)
 3    0.000    0.000    3.769    1.256 driver.py:258(on_container_finished)
 ```
+
+## Timing after implementing multi-workers with cleanup + replenshing offloaded to background threads
+Test Code:
+```py
+start = datetime.datetime.now()
+driver = Driver(num_workers=6)
+driver.turnup()
+print(driver.worker_queue)
+ready = datetime.datetime.now()
+test_basic_arith(driver)
+test_basic_arith(driver)
+test_basic_arith(driver)
+test_basic_arith(driver)
+test_basic_arith(driver)
+test_basic_arith(driver)
+done = datetime.datetime.now()
+driver.turndown()
+down = datetime.datetime.now()
+
+print("to ready: {}".format(ready - start))
+print("ready to done: {}".format(done - ready))
+print("done to exit: {}".format(down - done))
+```
+1 worker
+```
+to ready: 0:00:00.828749
+ready to done: 0:00:09.267263
+done to exit: 0:00:00.513949
+```
+2 worker
+```
+to ready: 0:00:01.769464
+ready to done: 0:00:04.226084
+done to exit: 0:00:00.676056
+```
+3 worker
+```
+to ready: 0:00:02.527097
+ready to done: 0:00:02.559072
+done to exit: 0:00:00.671892
+```
+6 worker
+```
+to ready: 0:00:05.186675
+ready to done: 0:00:00.387040
+done to exit: 0:00:01.346768
+```
