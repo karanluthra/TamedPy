@@ -59,18 +59,20 @@ class Driver(object):
 
     def turndown(self):
         print("driver turndown initiated")
+        # TODO: brainstorm about other threads that might be doing worker cleanups
         self.turndown_in_progress = True
         for worker in self.worker_queue:
             worker.turndown()
 
     def grab_ready_worker(self):
         ready_worker = None
-        for i in range(len(self.worker_queue)):
-            if self.worker_queue[i].status() == 1:
-                ready_worker = self.worker_queue[i]
-                break
-        if not ready_worker:
-            assert False, "out of workers"
+        while(ready_worker is None):
+            for worker in self.worker_queue:
+                if worker.status() == 1:
+                    ready_worker = worker
+                    break
+        # if not ready_worker:
+        #     assert False, "out of workers"
         return ready_worker
 
     def on_worker_exiting(self, worker):
@@ -140,6 +142,17 @@ class ContainerThread(threading.Thread):
       # container.remove()
       self.parent_worker.on_container_finished()
       print "Exiting " + self.name
+
+class WorkerCleanupThread(threading.Thread):
+    def __init__(self, worker):
+        threading.Thread.__init__(self)
+        self.worker = worker
+
+    def run(self):
+        then = datetime.datetime.now()
+        self.worker.container.stop(timeout=0)
+        print("took {} for container.stop()".format(datetime.datetime.now() - then))
+        self.worker.on_container_finished()
 
 # one Worker instance per containerized execution
 # owns details about execution artifacts and status
@@ -263,11 +276,7 @@ class Worker(object):
                 # print("closing the connection, trigger sandbox cleanup")
                 sock.close()
 
-        # TODO: offload to some background thread
-        then = datetime.datetime.now()
-        self.container.stop(timeout=0)
-        print("took {} for container.stop()".format(datetime.datetime.now() - then))
-        self.on_container_finished()
+        WorkerCleanupThread(self).start()
         return
 
     def turndown(self):
@@ -388,10 +397,10 @@ subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
 
 
 if __name__ == "__main__":
-    # subprocess.call("docker kill $(docker ps -q)", shell=True)
+    subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
     start = datetime.datetime.now()
-    driver = Driver(num_workers=3)
+    driver = Driver(num_workers=6)
     driver.turnup()
     print(driver.worker_queue)
     ready = datetime.datetime.now()
