@@ -341,17 +341,28 @@ subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
 if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
+    start = datetime.datetime.now()
     driver = Driver()
     driver.turnup()
     print(driver.worker_queue)
+    ready = datetime.datetime.now()
     test_basic_arith(driver)
+    test_basic_arith(driver)
+    test_basic_arith(driver)
+    done = datetime.datetime.now()
     driver.turndown()
+    down = datetime.datetime.now()
+
+    print("to ready: {}".format(ready - start))
+    print("ready to done: {}".format(done - ready))
+    print("done to exit: {}".format(down - done))
+
     #
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_single_file_io(driver)
-    driver.turndown()
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_single_file_io(driver)
+    # driver.turndown()
 
     # driver = Driver()
     # driver.turnup()
