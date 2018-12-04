@@ -1,6 +1,7 @@
 from uuid import uuid4
 import os
 import errno
+import json
 import subprocess
 import requests
 import time
@@ -190,14 +191,15 @@ class Worker(object):
         seccomp_policy = ""
         with open("policy.json") as f:
             seccomp_policy = f.read()
-
+        seccomp_policy_json = json.dumps(json.loads(seccomp_policy))
+        # print(seccomp_policy_json)
         try:
             self.container = client.containers.run(
                 "tamedpy",
                 volumes=volume_params,
                 ports=port_params,
                 detach=True,
-                # security_opt=['seccomp="policy.json"']
+                # security_opt=["seccomp={}".format(seccomp_policy_json)]
             )
             print(self.container)
         except docker.errors.APIError as e:
@@ -334,6 +336,12 @@ class Result(object):
             self._stdout = f.read()
         return self._stdout
 
+    def stderr(self):
+        stderr_path = os.path.join(self.path, "stderr.txt")
+        with open(stderr_path, "r") as f:
+            self._stderr = f.read()
+        return self._stderr
+
     def readFile(self, filename):
         # FIXME: return a generator instead
         filecontent = None
@@ -376,12 +384,30 @@ def test_single_file_io(driver):
     print(result.readFile("uppercase.txt"))
 
 def test_seccomp_blocking_mkdir(driver):
-    code = '''import os
-os.makedirs('karan')'''
+#     code = '''import os
+# os.makedirs('karan')'''
+    code = '''import subprocess
+subprocess.call("mkdir karan", shell=True)'''
 
     result = driver.execute(code)
     print(result)
+    print(result.stderr())
     print result.listdir()
+
+
+# test works correctly but not the most demonstrative
+def test_seccomp_blocking_chown(driver):
+    code = '''import subprocess
+#print(str(subprocess.check_output("ls -l /tmp/py", shell=True)))
+returncode = subprocess.call("chown sandboxuser /tmp/py", shell=True)
+print(returncode)
+#print(str(subprocess.check_output("ls -l /tmp/py", shell=True)))
+'''
+    result = driver.execute(code)
+    print(result)
+    print(result.stderr())
+    print result.listdir()
+
 
 def test_seccomp_blocking_mount(driver):
     code = '''import subprocess, os
@@ -394,21 +420,17 @@ subprocess.call("whoami", shell=True)
 subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
     result = driver.execute(code)
     print(result)
+    print(result.stderr())
 
 
 if __name__ == "__main__":
-    subprocess.call("docker kill $(docker ps -q)", shell=True)
+    # subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
     start = datetime.datetime.now()
-    driver = Driver(num_workers=6)
+    driver = Driver(num_workers=1)
     driver.turnup()
     print(driver.worker_queue)
     ready = datetime.datetime.now()
-    test_basic_arith(driver)
-    test_basic_arith(driver)
-    test_basic_arith(driver)
-    test_basic_arith(driver)
-    test_basic_arith(driver)
     test_basic_arith(driver)
     done = datetime.datetime.now()
     driver.turndown()
@@ -419,20 +441,21 @@ if __name__ == "__main__":
     print("done to exit: {}".format(down - done))
 
     #
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_single_file_io(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_single_file_io(driver)
+    driver.turndown()
 
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_seccomp_blocking_mount(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_seccomp_blocking_mount(driver)
+    driver.turndown()
 
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_seccomp_blocking_mkdir(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_seccomp_blocking_mkdir(driver)
+    # test_seccomp_blocking_chown(driver)
+    driver.turndown()
