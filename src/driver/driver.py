@@ -218,13 +218,15 @@ class Worker(object):
                 sock.close()
 
         # TODO: offload to some background thread
-        self.container.stop()
+        then = datetime.datetime.now()
+        self.container.stop(timeout=0)
+        print("took {} for container.stop()".format(datetime.datetime.now() - then))
         self.on_container_finished()
         return
 
     def turndown(self):
         print("worker {} turndown intiated".format(self.id))
-        self.container.stop()
+        self.container.stop(timeout=0)
 
     def get_exec_dir_path(self):
         return self.execd_path
@@ -301,6 +303,7 @@ def exec_http_req(port, execid, code):
 def test_basic_arith(driver):
     code = 'print(2**4)'
     result = driver.execute(code)
+    assert(result.stdout().strip() == "16")
     print(result)
 
 def test_single_file_io(driver):

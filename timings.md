@@ -170,3 +170,115 @@ to ready: 0:00:00.744232
 ready to done: 0:00:35.734923
 done to exit: 0:00:10.543997
 ```
+After adding timeout value (0 sec) to docker.stop() (was 10 seconds by default)
+More here: https://github.com/moby/moby/issues/3766
+
+```
+(tamedpy_env) Karans-MacBook-Pro:TamedPy luthrak$ python src/driver/driver.py
+new worker 2e4925b8-9593-4565-8e3e-b71d38acef19 coming up
+<Container: 5c61dd6e3f>
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received "READY"
+sandbox is READY
+connected! and ready
+closing socket
+[<__main__.Worker object at 0x104d73250>]
+sending "START"
+received "DONE"
+Got Exec result from sandbox after  0:00:00.046184
+sandbox execution success
+connected! and ready
+closing the connection, trigger sandbox cleanup
+took 0:00:00.561710 for container.stop()
+worker 2e4925b8-9593-4565-8e3e-b71d38acef19 cleaning up
+worker 2e4925b8-9593-4565-8e3e-b71d38acef19 exiting
+new worker ce0d98af-1161-407c-8186-c85a3924abdb coming up
+<Container: d5439e8421>
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received "READY"
+sandbox is READY
+connected! and ready
+closing socket
+worker 2e4925b8-9593-4565-8e3e-b71d38acef19 exited
+[2e4925b8-9593-4565-8e3e-b71d38acef19] 16
+
+sending "START"
+received "DONE"
+Got Exec result from sandbox after  0:00:00.043019
+sandbox execution success
+connected! and ready
+closing the connection, trigger sandbox cleanup
+took 0:00:00.569350 for container.stop()
+worker ce0d98af-1161-407c-8186-c85a3924abdb cleaning up
+worker ce0d98af-1161-407c-8186-c85a3924abdb exiting
+new worker 20120ad5-8b23-46c7-a2f3-6edddb8607b3 coming up
+<Container: a325e2c2f9>
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received "READY"
+sandbox is READY
+connected! and ready
+closing socket
+worker ce0d98af-1161-407c-8186-c85a3924abdb exited
+[ce0d98af-1161-407c-8186-c85a3924abdb] 16
+
+sending "START"
+received "DONE"
+Got Exec result from sandbox after  0:00:00.045416
+sandbox execution success
+connected! and ready
+closing the connection, trigger sandbox cleanup
+took 0:00:00.680877 for container.stop()
+worker 20120ad5-8b23-46c7-a2f3-6edddb8607b3 cleaning up
+worker 20120ad5-8b23-46c7-a2f3-6edddb8607b3 exiting
+new worker 06e006f8-7b3b-4610-aa54-d5bb17df1007 coming up
+<Container: 99bb91efc1>
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received ""
+closing socket
+sending "HELLO"
+received "READY"
+sandbox is READY
+connected! and ready
+closing socket
+worker 20120ad5-8b23-46c7-a2f3-6edddb8607b3 exited
+[20120ad5-8b23-46c7-a2f3-6edddb8607b3] 16
+
+driver turndown initiated
+worker 06e006f8-7b3b-4610-aa54-d5bb17df1007 turndown intiated
+to ready: 0:00:00.903686
+ready to done: 0:00:05.728574
+done to exit: 0:00:00.537034
+```
+
+Running the script with profiler `python -m cProfile src/driver/driver.py > profile.txt`
+tells that the significant 5 seconds in executions are spent inside sleep -
+```
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+5    0.513    0.103    0.513    0.103 {time.sleep}
+```
+
+exec_code_socket seems to be doing fine, timing wise.
+Most of its time consumption is in on_container_finished, which can be offloaded to another thread/
+```
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+3    0.000    0.000    5.526    1.842 driver.py:186(exec_code_socket)
+3    0.000    0.000    3.769    1.256 driver.py:258(on_container_finished)
+```
