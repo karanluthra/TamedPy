@@ -24,10 +24,13 @@ except OSError as e:
 # the daemon part - manages the pool of workers and assigns tasks
 # provides interface to interact with execution
 class Driver(object):
-    def __init__(self):
-        self.num_workers = 1
+    def __init__(self, num_workers=1):
+        self.num_workers = num_workers
         self.worker_queue = []
         self.turndown_in_progress = False
+        self.port_manager = PortManagerRandom()
+        # pass size = twice as many worker when implementing multi-threaded cleanup
+        # self.port_manager = PortManagerPool(size = self.num_workers)
 
     def __del__(self):
         print("driver exiting..")
@@ -42,7 +45,8 @@ class Driver(object):
         return worker.execute(source_code)
 
     def turnup_one_new_worker(self):
-        new_worker = Worker(self)
+        port = self.port_manager.grab_free_port()
+        new_worker = Worker(self, port)
         # synch step, long, IO bound
         new_worker.turnup()
         assert new_worker.status() == 1
@@ -72,8 +76,51 @@ class Driver(object):
     def on_worker_exiting(self, worker):
         assert(worker.status() == 2)
         self.worker_queue.remove(worker)
+        self.port_manager.release_port(worker.port)
         if not self.turndown_in_progress:
             self.turnup_one_new_worker()
+
+class PortManagerRandom(object):
+    '''
+    from https://gist.github.com/gabrielfalcao/20e567e188f588b65ba2
+    This has a race condition, since another process may grab that port after
+    tcp.close(). This might be ok, if you simply catch the exception and try
+    again, although it strikes me as possibly insecure to do so.
+    '''
+    def grab_free_port(self):
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp.bind(('', 0))
+        addr, port = tcp.getsockname()
+        tcp.close()
+        return port
+
+    def release_port(self, port):
+        pass
+
+class PortManagerPool(object):
+    def __init__(self, size, starting_port=6110):
+        self.port_pool = [None] * (size)
+        self.init_port_pool(starting_port)
+
+    def init_port_pool(self, starting_port):
+        for i in range(len(self.port_pool)):
+            self.port_pool[i] = starting_port + i
+        print(self.port_pool)
+
+    def grab_free_port(self):
+        port = None
+        for i in range(len(self.port_pool)):
+            if not self.port_pool[i] is None:
+                port = self.port_pool[i]
+                self.port_pool[i] = None
+                break
+        assert(port != None), "free port unavailable"
+        return port
+
+    def release_port(self, port):
+        for i in range(len(self.port_pool)):
+            if self.port_pool[i] is None:
+                self.port_pool[i] = port
 
 
 class ContainerThread(threading.Thread):
@@ -97,12 +144,12 @@ class ContainerThread(threading.Thread):
 # one Worker instance per containerized execution
 # owns details about execution artifacts and status
 class Worker(object):
-    def __init__(self, parent_driver):
+    def __init__(self, parent_driver, port):
         self.parent_driver = parent_driver
         self.id = uuid4()
         self.execd_path = None
         self._status = 0
-        self.port = None
+        self.port = port
         self.container = None
         self.sock = None
         self.connection = None
@@ -125,8 +172,8 @@ class Worker(object):
         # volume params
         mnt_pnt = "/tmp/py"
         volume_params = {execd_path: {"bind": mnt_pnt, "mode": "rw"}}
-        port_params = {'6110/tcp': ('127.0.0.1', 6110)}
-
+        port_params = {'6110/tcp': ('127.0.0.1', self.port)}
+        print("Worker {}, port_params: {}".format(self.id, port_params))
         seccomp_policy = ""
         with open("policy.json") as f:
             seccomp_policy = f.read()
@@ -153,16 +200,15 @@ class Worker(object):
 
     def hello_socket(self):
         server_address = 'localhost'
-        port = 6110
         while(True):
             try:
-                sock = socket.create_connection((server_address, port))
+                sock = socket.create_connection((server_address, self.port))
                 message = "HELLO"
-                print('sending "%s"' % message)
+                # print('sending "%s"' % message)
                 sock.sendall(message)
 
                 data = sock.recv(5)
-                print('received "%s"' % data)
+                # print('received "%s"' % data)
 
                 if data.strip() == b'':
                     time.sleep(0.1)
@@ -175,46 +221,46 @@ class Worker(object):
                 print(e)
                 time.sleep(1)
             else:
-                print("connected! and ready")
+                # print("connected! and ready")
                 self._status = 1
                 break
             finally:
-                print('closing socket')
+                # print('closing socket')
                 sock.close()
         return
 
     def exec_code_socket(self):
         server_address = 'localhost'
-        port = 6110
         while(True):
             try:
-                sock = socket.create_connection((server_address, port))
+                sock = socket.create_connection((server_address, self.port))
                 then = datetime.datetime.now()
                 message = b'START'
-                print('sending "%s"' % message)
+                # print('sending "%s"' % message)
                 sock.sendall(message)
 
                 data = sock.recv(4)
-                print('received "%s"' % data)
+                # print('received "%s"' % data)
 
                 if data.strip() == b'':
                     print("ERROR: shouldn't be getting blank from server now")
                     time.sleep(0.1)
                     continue
                 if data and data.strip() == b'DONE':
-                    print "Got Exec result from sandbox after ", str(datetime.datetime.now() - then)
-                    print "sandbox execution success"
+                    pass
+                    # print "Got Exec result from sandbox after ", str(datetime.datetime.now() - then)
+                    # print "sandbox execution success"
                 else:
                     raise Exception("bad message")
             except Exception as e:
                 print(e)
                 time.sleep(1)
             else:
-                print("connected! and ready")
+                # print("connected! and ready")
                 self._status = 2
                 break
             finally:
-                print("closing the connection, trigger sandbox cleanup")
+                # print("closing the connection, trigger sandbox cleanup")
                 sock.close()
 
         # TODO: offload to some background thread
@@ -345,10 +391,13 @@ if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
     start = datetime.datetime.now()
-    driver = Driver()
+    driver = Driver(num_workers=3)
     driver.turnup()
     print(driver.worker_queue)
     ready = datetime.datetime.now()
+    test_basic_arith(driver)
+    test_basic_arith(driver)
+    test_basic_arith(driver)
     test_basic_arith(driver)
     test_basic_arith(driver)
     test_basic_arith(driver)
