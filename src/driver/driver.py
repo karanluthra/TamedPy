@@ -7,6 +7,9 @@ import time
 import threading
 import docker
 import shutil
+import socket
+import sys
+import datetime
 
 client = docker.from_env()
 
@@ -101,6 +104,8 @@ class Worker(object):
         self._status = 0
         self.port = None
         self.container = None
+        self.sock = None
+        self.connection = None
 
     def status(self):
         return self._status
@@ -109,12 +114,6 @@ class Worker(object):
         # launch worker, check "ready", change status
         print("new worker {} coming up".format(self.id))
 
-        # print(client.containers.run("tamedpy"))
-        # docker run -v /Users/luthrak/Projects/611/TamedPy/src/exec1:/tmp/py tamedpy
-        # host_path = "/Users/luthrak/Projects/611/TamedPy/src/exec1"
-        # self.execd_path = host_path
-
-        # TODO: [DONE] Create new folder with exec id and mount *that* to this container.
         execd_path = os.path.join(WORKSPACE_DIR, str(self.id))
         try:
             os.makedirs(execd_path)
@@ -122,13 +121,11 @@ class Worker(object):
             if e.errno != errno.EEXIST:
                 raise
         self.execd_path = execd_path
+
+        # volume params
         mnt_pnt = "/tmp/py"
         volume_params = {execd_path: {"bind": mnt_pnt, "mode": "rw"}}
-
-        # TODO: grab a port number from free pool
-        port = 3000
-        self.port = port
-        port_params = {"3000": port}
+        port_params = {'6110/tcp': ('127.0.0.1', 6110)}
 
         seccomp_policy = ""
         with open("policy.json") as f:
@@ -136,19 +133,94 @@ class Worker(object):
 
         try:
             self.container = client.containers.run(
-                "tamedpy", volumes=volume_params, ports=port_params, detach=True, security_opt=['seccomp="policy.json"']
+                "tamedpy",
+                volumes=volume_params,
+                ports=port_params,
+                detach=True,
+                # security_opt=['seccomp="policy.json"']
             )
             print(self.container)
-            # FIXME: instead of sleeping, implement container sending a notif that it is ready
-            time.sleep(1)
-            self._status = 1
-            ContainerThread(self, self.container.id).start()
-
         except docker.errors.APIError as e:
             # FIXME: ask for specific error codes / eg when port is already allocated, take specific remedial action
             print(e)
             exit(-1)
-        # start a thread context that waits to hear from the spawned container when it stops
+
+        # start socket connection
+        self.hello_socket()
+        assert(self._status == 1)
+        return
+
+
+    def hello_socket(self):
+        server_address = 'localhost'
+        port = 6110
+        while(True):
+            try:
+                sock = socket.create_connection((server_address, port))
+                message = "HELLO"
+                print('sending "%s"' % message)
+                sock.sendall(message)
+
+                data = sock.recv(5)
+                print('received "%s"' % data)
+
+                if data.strip() == b'':
+                    time.sleep(0.1)
+                    continue
+                if data and data.strip() == b'READY':
+                    print("sandbox is READY")
+                else:
+                    raise Exception("bad message")
+            except Exception as e:
+                print(e)
+                time.sleep(1)
+            else:
+                print("connected! and ready")
+                self._status = 1
+                break
+            finally:
+                print('closing socket')
+                sock.close()
+        return
+
+    def exec_code_socket(self):
+        server_address = 'localhost'
+        port = 6110
+        while(True):
+            try:
+                sock = socket.create_connection((server_address, port))
+                then = datetime.datetime.now()
+                message = b'START'
+                print('sending "%s"' % message)
+                sock.sendall(message)
+
+                data = sock.recv(4)
+                print('received "%s"' % data)
+
+                if data.strip() == b'':
+                    print("ERROR: shouldn't be getting blank from server now")
+                    time.sleep(0.1)
+                    continue
+                if data and data.strip() == b'DONE':
+                    print "Got Exec result from sandbox after ", str(datetime.datetime.now() - then)
+                    print "sandbox execution success"
+                else:
+                    raise Exception("bad message")
+            except Exception as e:
+                print(e)
+                time.sleep(1)
+            else:
+                print("connected! and ready")
+                self._status = 2
+                break
+            finally:
+                print("closing the connection, trigger sandbox cleanup")
+                sock.close()
+
+        # TODO: offload to some background thread
+        self.container.stop()
+        self.on_container_finished()
+        return
 
     def turndown(self):
         print("worker {} turndown intiated".format(self.id))
@@ -171,9 +243,14 @@ class Worker(object):
         return ofpath
 
     def execute(self, code):
-        response = exec_http_req(self.port, self.id, code)
-        assert response.ok
-        result = Result(self.execd_path, self.id, response.text)
+        # response = exec_http_req(self.port, self.id, code)
+        # assert response.ok
+        code_file_path = os.path.join(self.execd_path, "unsafe.py")
+        with open(code_file_path, "w") as f:
+            f.write(code)
+        self.exec_code_socket()
+
+        result = Result(self.execd_path, self.id)
         return result
 
     def on_container_finished(self):
@@ -187,16 +264,18 @@ class Worker(object):
 
 class Result(object):
     # TODO: add support for result.abort() to give up on the container and shutdown
-    def __init__(self, path, exec_id, stdout):
+    def __init__(self, path, exec_id):
         self.path = path
         self.exec_id = exec_id
-        self._stdout = stdout
 
     def __repr__(self):
         return "[" + str(self.exec_id) + "] " + self.stdout()
 
     def stdout(self):
-        return str(self._stdout)
+        stdout_path = os.path.join(self.path, "stdout.txt")
+        with open(stdout_path, "r") as f:
+            self._stdout = f.read()
+        return self._stdout
 
     def readFile(self, filename):
         # FIXME: return a generator instead
@@ -262,17 +341,17 @@ subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
 if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_basic_arith(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_basic_arith(driver)
+    driver.turndown()
     #
-    # driver = Driver()
-    # driver.turnup()
-    # print(driver.worker_queue)
-    # test_single_file_io(driver)
-    # driver.turndown()
+    driver = Driver()
+    driver.turnup()
+    print(driver.worker_queue)
+    test_single_file_io(driver)
+    driver.turndown()
 
     # driver = Driver()
     # driver.turnup()
@@ -280,8 +359,8 @@ if __name__ == "__main__":
     # test_seccomp_blocking_mount(driver)
     # driver.turndown()
 
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_seccomp_blocking_mkdir(driver)
-    driver.turndown()
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_seccomp_blocking_mkdir(driver)
+    # driver.turndown()

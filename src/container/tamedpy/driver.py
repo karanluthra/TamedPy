@@ -1,49 +1,17 @@
-from flask import Flask, request
 import subprocess
 import os
+import socket
+import sys
+import time
 
-app = Flask(__name__)
-
-@app.route("/")
-def hello():
-    return "Hello World!"
-
-@app.route("/run", methods=['POST'])
-def run():
-    if request.method == 'POST':
-        code = request.get_json().get('code')
-        output = runcode(code)
-        print("Executed code, output is: ")
-        print(output)
-        return output
-    return 'Expected POST request with data {"code": ""}'
-
-@app.route("/run/<execid>", methods=['POST'])
-def run_one(execid):
-    print(execid)
-    # print(os.listdir("."))
-    # print(os.listdir("/tmp/py"))
-    os.chdir("/tmp/py")
-
-    if request.method == 'POST':
-        code = request.get_json().get('code')
-        output = runcode(code)
-        print("Executed code, output is: ")
-        print(output)
-        shutdown_server()
-        return output
-    shutdown_server()
-    return 'Expected POST request with data {"code": ""}'
-
-def runcode(code):
-    with open("unsafe.py", "w") as f:
-        f.write(code)
-    # exec python unsafe.py
-    completedProc = subprocess.run(
-        ["python", "unsafe.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+def runcode():
+    with open('stdout.txt', 'wb', 0) as stdout_file, \
+        open('stderr.txt', 'wb', 0) as stderr_file :
+        completedProc = subprocess.run(
+            ["python", "unsafe.py"],
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
     output = ''
     if completedProc.returncode == 0:
         output = completedProc.stdout
@@ -52,13 +20,51 @@ def runcode(code):
         output += str(completedProc.stdout)
     return output
 
-def shutdown_server():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
 
 if __name__ == '__main__':
     print(os.listdir("/tmp/py"))
+    os.chdir("/tmp/py")
 
-    app.run(host="0.0.0.0", port=3000)
+
+    server_address = "0.0.0.0"
+    port = 6110
+    # Create a socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # Bind the socket to the port
+    print('starting up on %s' % server_address)
+    sock.bind((server_address, port))
+
+    # Listen for incoming connections
+    sock.listen(5)
+    while(True):
+        print('waiting for a connection')
+        connection, client_address = sock.accept()
+        try:
+            print('connection from' + str(client_address))
+
+            data = connection.recv(5)
+            print('received "%s"' % data)
+
+            # respond to HELLO
+            if data and data.strip() == b'HELLO':
+                print("host says hello")
+                message = b'READY'
+                print('sending "%s"' % message)
+                connection.sendall(message)
+            # respond to START
+            elif data and data.strip() == b'START':
+                print("host says start")
+                ##### DO CODE EXEC HERE ######
+                runcode()
+                message = b'DONE'
+                print('sending "%s"' % message)
+                connection.sendall(message)
+            else:
+                raise Exception("bad message")
+        except Exception as e:
+            print(e)
+            exit(1)
+        finally:
+            connection.close()
+    print("normal exit")
