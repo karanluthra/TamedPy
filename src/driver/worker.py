@@ -52,8 +52,17 @@ class Worker(object):
         # volume params
         mnt_pnt = "/tmp/py"
         volume_params = {execd_path: {"bind": mnt_pnt, "mode": "rw"}}
+        # port port_params
         port_params = {'6110/tcp': ('127.0.0.1', self.port)}
         print("Worker {}, port_params: {}".format(self.id, port_params))
+
+        #network params
+        # docker network create --internal no-internet
+        # 954c36c7b483b7d7f8618d904b5bb6f4edb6e3ef9324c8d11fb4ee4590fbe0ce
+        # network="no-internet"
+        # FIXME: socket networking bw host and docker doesn't work with this custom nw
+
+        # security params
         seccomp_policy = ""
         with open("policy.json") as f:
             seccomp_policy = f.read()
@@ -64,6 +73,7 @@ class Worker(object):
                 "tamedpy",
                 volumes=volume_params,
                 ports=port_params,
+                # network=network,
                 detach=True,
                 # security_opt=["seccomp={}".format(seccomp_policy_json)]
             )
