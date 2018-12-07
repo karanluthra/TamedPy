@@ -29,7 +29,7 @@ class SandboxExecuter(Resource):
         }
         return response
 
-def truncate_text(text, limit=100):
+def truncate_text(text, limit=1000):
     if len(text) > limit:
         text = text[:limit] + "\n" + "...(truncated)"
     return text
