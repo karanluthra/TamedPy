@@ -5,13 +5,21 @@ import sys
 import time
 
 def runcode():
-    with open('stdout.txt', 'wb', 0) as stdout_file, \
-        open('stderr.txt', 'wb', 0) as stderr_file :
-        completedProc = subprocess.run(
-            ["python", "unsafe.py"],
-            stdout=stdout_file,
-            stderr=stderr_file,
-        )
+    try:
+        with open('stdout.txt', 'wb', 0) as stdout_file, \
+            open('stderr.txt', 'wb', 0) as stderr_file :
+            completedProc = subprocess.run(
+                ["python", "unsafe.py"],
+                stdout=stdout_file,
+                stderr=stderr_file,
+                # TODO: parameterize timeout
+                timeout=10
+            )
+    except subprocess.TimeoutExpired as e:
+        with open('stderr.txt', 'a') as stderr_file:
+            stderr_file.write(str(e))
+        return
+
     output = ''
     if completedProc.returncode == 0:
         output = completedProc.stdout

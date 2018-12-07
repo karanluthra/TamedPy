@@ -24,10 +24,15 @@ class SandboxExecuter(Resource):
         result = driver.execute(srccode)
 
         response = {
-            "stdout": result.stdout(),
-            "stderr": result.stderr()
+            "stdout": truncate_text(result.stdout()),
+            "stderr": truncate_text(result.stderr())
         }
         return response
+
+def truncate_text(text, limit=100):
+    if len(text) > limit:
+        text = text[:limit] + "\n" + "...(truncated)"
+    return text
 
 ##
 ## Actually setup the Api resource routing here
