@@ -1,11 +1,17 @@
 import os
 import subprocess
 import docker
+import logging
 import sys
 import datetime
 
 from worker import Worker
 from portmanager import PortManagerPool, PortManagerRandom
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(1)
+
 
 # the daemon part - manages the pool of workers and assigns tasks
 # provides interface to interact with execution
@@ -19,7 +25,6 @@ class Driver(object):
         # self.port_manager = PortManagerPool(size = self.num_workers)
 
     def __del__(self):
-        print("driver exiting..")
         if self.worker_queue:
             self.turndown()
 
@@ -44,11 +49,12 @@ class Driver(object):
             self.turnup_one_new_worker()
 
     def turndown(self):
-        print("driver turndown initiated")
+        logger.info("driver turndown initiated")
         # TODO: brainstorm about other threads that might be doing worker cleanups
         self.turndown_in_progress = True
         for worker in self.worker_queue:
             worker.turndown()
+        logger.info("driver exiting..")
 
     def grab_ready_worker(self):
         ready_worker = None
@@ -131,36 +137,36 @@ subprocess.call("mount /dev/cdrom /media/cdrom", shell=True)'''
 if __name__ == "__main__":
     # subprocess.call("docker kill $(docker ps -q)", shell=True)
     #
-    start = datetime.datetime.now()
+    # start = datetime.datetime.now()
     driver = Driver(num_workers=1)
     driver.turnup()
-    print(driver.worker_queue)
-    ready = datetime.datetime.now()
+    # print(driver.worker_queue)
+    # ready = datetime.datetime.now()
     test_basic_arith(driver)
-    done = datetime.datetime.now()
+    # done = datetime.datetime.now()
     driver.turndown()
-    down = datetime.datetime.now()
-
-    print("to ready: {}".format(ready - start))
-    print("ready to done: {}".format(done - ready))
-    print("done to exit: {}".format(down - done))
-
+    # down = datetime.datetime.now()
     #
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_single_file_io(driver)
-    driver.turndown()
-
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_seccomp_blocking_mount(driver)
-    driver.turndown()
-
-    driver = Driver()
-    driver.turnup()
-    print(driver.worker_queue)
-    test_seccomp_blocking_mkdir(driver)
-    # test_seccomp_blocking_chown(driver)
-    driver.turndown()
+    # print("to ready: {}".format(ready - start))
+    # print("ready to done: {}".format(done - ready))
+    # print("done to exit: {}".format(down - done))
+    #
+    # #
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_single_file_io(driver)
+    # driver.turndown()
+    #
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_seccomp_blocking_mount(driver)
+    # driver.turndown()
+    #
+    # driver = Driver()
+    # driver.turnup()
+    # print(driver.worker_queue)
+    # test_seccomp_blocking_mkdir(driver)
+    # # test_seccomp_blocking_chown(driver)
+    # driver.turndown()

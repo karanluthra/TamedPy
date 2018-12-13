@@ -13,13 +13,13 @@ class Result(object):
     def stdout(self):
         stdout_path = os.path.join(self.path, "stdout.txt")
         with open(stdout_path, "r") as f:
-            self._stdout = f.read()
+            self._stdout = f.read().strip()
         return self._stdout
 
     def stderr(self):
         stderr_path = os.path.join(self.path, "stderr.txt")
         with open(stderr_path, "r") as f:
-            self._stderr = f.read()
+            self._stderr = f.read().strip()
         return self._stderr
 
     def readFile(self, filename):

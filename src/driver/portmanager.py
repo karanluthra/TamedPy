@@ -1,5 +1,9 @@
+import logging
 import socket
 
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(1)
 
 class PortManagerRandom(object):
     '''
@@ -26,7 +30,7 @@ class PortManagerPool(object):
     def init_port_pool(self, starting_port):
         for i in range(len(self.port_pool)):
             self.port_pool[i] = starting_port + i
-        print(self.port_pool)
+        logger.info(self.port_pool)
 
     def grab_free_port(self):
         port = None
