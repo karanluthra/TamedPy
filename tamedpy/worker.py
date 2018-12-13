@@ -176,7 +176,7 @@ class Worker(object):
         return
 
     def turndown(self):
-        logger.info("worker {} turndown intiated".format(self.id))
+        logger.info("worker {} turndown initiated".format(self.id))
         self.container.stop(timeout=0)
         # TODO: self.container.remove() too
 
