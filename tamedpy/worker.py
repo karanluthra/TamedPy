@@ -79,10 +79,10 @@ class Worker(object):
         # FIXME: socket networking bw host and docker doesn't work with this custom nw
 
         # security params
-        # seccomp_policy = ""
-        with open("policy.json") as f:
-            seccomp_policy = f.read()
-        seccomp_policy_json = json.dumps(json.loads(seccomp_policy))
+        # FIXME: take path to seccomp policy as an argument to Driver and Worker
+        # with open("policy.json") as f:
+        #     seccomp_policy = f.read()
+        # seccomp_policy_json = json.dumps(json.loads(seccomp_policy))
 
         try:
             self.container = client.containers.run(
